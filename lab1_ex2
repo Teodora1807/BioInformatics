@@ -1,0 +1,22 @@
+from collections import Counter
+
+def relative_frequencies(sequence: str):
+    sequence = sequence.replace(" ", "")
+    length = len(sequence)
+    
+    counts = Counter(sequence)  
+    rel_freqs = {symbol: count/length for symbol, count in counts.items()}
+    
+    return rel_freqs
+
+def main():
+    S = "AACC"
+    freqs = relative_frequencies(S)
+    
+    print("Sequence:", S)
+    print("Relative frequencies:")
+    for symbol, freq in sorted(freqs.items()):
+        print(f"  {symbol}: {freq*100:.2f}%") 
+
+if __name__ == "__main__":
+    main()
