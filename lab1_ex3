@@ -1,0 +1,210 @@
+# gui_fasta_app.py
+
+import textwrap
+from collections import Counter
+import tkinter as tk
+from tkinter import filedialog, messagebox
+
+
+def find_alphabet(sequence: str):
+    """
+    Returnează alfabetul (simbolurile unice) sortat al unei secvențe.
+    Elimină spațiile și newline-urile.
+    """
+    sequence = sequence.replace(" ", "").replace("\n", "")
+    return sorted(set(sequence))
+
+
+def relative_frequencies(sequence: str):
+    """
+    Returnează {simbol: frecvență_relativă} pentru secvență.
+    Suma frecvențelor este 1. Elimină spațiile și newline-urile.
+    """
+    sequence = sequence.replace(" ", "").replace("\n", "")
+    if not sequence:
+        return {}
+    counts = Counter(sequence)
+    n = len(sequence)
+    return {sym: counts[sym] / n for sym in counts}
+
+
+def parse_fasta(filepath: str):
+    """
+    Parsează un fișier FASTA (single sau multi-record).
+    Returnează listă de tuple (header, sequence), unde:
+      - header = linia fără caracterul '>' de la început
+      - sequence = secvența concatenată (fără spații/newline)
+    """
+    records = []
+    header = None
+    seq_chunks = []
+
+    with open(filepath, "r", encoding="utf-8") as f:
+        for raw in f:
+            line = raw.rstrip("\n")
+            if not line:
+                continue
+            if line.startswith(">"):
+                # finalizează record-ul anterior
+                if header is not None:
+                    records.append((header, "".join(seq_chunks)))
+                header = line[1:].strip()
+                seq_chunks = []
+            else:
+                seq_chunks.append(line.strip())
+
+    if header is not None:
+        records.append((header, "".join(seq_chunks)))
+
+    if not records:
+        raise ValueError("Nu am găsit niciun record FASTA. Prima linie trebuie să înceapă cu '>'.")
+
+    return records
+
+
+def write_sample_fasta(filepath: str, kind: str = "DNA"):
+    """
+    Generează un fișier FASTA de exemplu, cu linii de 30 caractere.
+    kind: 'DNA', 'RNA' sau 'PROT'
+    """
+    kind_up = kind.upper()
+    if kind_up == "DNA":
+        header = "sample_dna | id:DNA001 | description: Demo DNA sequence"
+        raw_seq = "ATTGCCCCGAAT" * 10 + "TTGCAAGGCC"  # ~130 nt
+    elif kind_up == "RNA":
+        header = "sample_rna | id:RNA001 | description: Demo RNA sequence"
+        raw_seq = ("AUUGCCCCGAAU" * 10 + "UUGCAAGGCC")  # ~132 nt (U în loc de T)
+    else:
+        header = "sample_prot | id:PROT001 | description: Demo protein sequence"
+        raw_seq = "MKTFFVLVLLPLVSSQCVNLTTRNV" * 5  # ~120 aa, demo
+
+    wrapped = "\n".join(textwrap.wrap(raw_seq, width=30))
+    content = f">{header}\n{wrapped}\n"
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+class FastaApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("FASTA Analyzer — Alphabet & Relative Frequencies")
+        self.geometry("860x560")
+
+        # ----- Toolbar (butoane) -----
+        toolbar = tk.Frame(self)
+        toolbar.pack(fill=tk.X, padx=10, pady=8)
+
+        btn_open = tk.Button(toolbar, text="Open FASTA…", command=self.open_fasta)
+        btn_open.pack(side=tk.LEFT, padx=(0, 8))
+
+        btn_sample_dna = tk.Button(toolbar, text="Generate Sample FASTA (DNA)",
+                                   command=lambda: self.generate_sample(kind="DNA"))
+        btn_sample_dna.pack(side=tk.LEFT, padx=(0, 8))
+
+        btn_sample_rna = tk.Button(toolbar, text="Generate Sample FASTA (RNA)",
+                                   command=lambda: self.generate_sample(kind="RNA"))
+        btn_sample_rna.pack(side=tk.LEFT, padx=(0, 8))
+
+        btn_sample_prot = tk.Button(toolbar, text="Generate Sample FASTA (Protein)",
+                                    command=lambda: self.generate_sample(kind="PROT"))
+        btn_sample_prot.pack(side=tk.LEFT, padx=(0, 8))
+
+        frame_txt = tk.Frame(self)
+        frame_txt.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+
+        self.txt = tk.Text(frame_txt, wrap="word", font=("Consolas", 11))
+        self.txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scroll = tk.Scrollbar(frame_txt, command=self.txt.yview)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.txt.configure(yscrollcommand=scroll.set)
+
+        self._writeln(
+            "Bun venit!\n"
+            "• Folosește „Open FASTA…” pentru a selecta un fișier .fasta/.fa.\n"
+            "• Sau generează un fișier FASTA de exemplu (DNA/RNA/Protein) — linii de 30 caractere.\n"
+            "• Afișăm: header, lungime, alfabet, counts și frecvențe relative (%).\n"
+        )
+
+    def _clear(self):
+        self.txt.delete("1.0", tk.END)
+
+    def _writeln(self, s=""):
+        self.txt.insert(tk.END, s + "\n")
+        self.txt.see(tk.END)
+
+    def _analyze_record(self, idx: int, header: str, seq: str):
+        seq_n = seq.replace(" ", "").replace("\n", "")
+        counts = Counter(seq_n)
+        length = len(seq_n)
+        alpha = find_alphabet(seq_n)
+        freqs = {sym: counts[sym] / length for sym in counts} if length > 0 else {}
+
+        self._writeln(f"=== Record {idx + 1} ===")
+        self._writeln(f"> {header}")
+        self._writeln(f"Length: {length}")
+        self._writeln(f"Alphabet: {alpha}")
+
+        self._writeln("Counts:")
+        for sym in sorted(counts):
+            self._writeln(f"  {sym}: {counts[sym]}")
+
+        self._writeln("Relative frequencies (%):")
+        for sym in sorted(freqs):
+            self._writeln(f"  {sym}: {freqs[sym]*100:.2f}%")
+
+        self._writeln()
+
+    def open_fasta(self):
+        path = filedialog.askopenfilename(
+            title="Select FASTA file",
+            filetypes=[
+                ("FASTA files", "*.fasta *.fa *.fna *.faa *.ffn *.frn"),
+                ("All files", "*.*")
+            ]
+        )
+        if not path:
+            return
+        try:
+            records = parse_fasta(path)
+        except Exception as e:
+            messagebox.showerror("Parse error", f"Nu pot parsa FASTA:\n{e}")
+            return
+
+        self._clear()
+        self._writeln(f"File: {path}\n")
+        for i, (hdr, seq) in enumerate(records):
+            self._analyze_record(i, hdr, seq)
+
+    def generate_sample(self, kind: str):
+        # alege unde salvezi
+        default_name = {"DNA": "sample_dna.fasta",
+                        "RNA": "sample_rna.fasta",
+                        "PROT": "sample_protein.fasta"}[kind.upper()]
+        path = filedialog.asksaveasfilename(
+            title=f"Save Sample {kind} FASTA",
+            defaultextension=".fasta",
+            initialfile=default_name,
+            filetypes=[("FASTA files", "*.fasta"), ("All files", "*.*")]
+        )
+        if not path:
+            return
+
+        try:
+            write_sample_fasta(path, kind=kind)
+
+            records = parse_fasta(path)
+            self._clear()
+            self._writeln(f"Sample FASTA created: {path}\n")
+            for i, (hdr, seq) in enumerate(records):
+                self._analyze_record(i, hdr, seq)
+        except Exception as e:
+            messagebox.showerror("Error", f"Eroare la generare/analiză FASTA:\n{e}")
+
+
+if __name__ == "__main__":
+
+    app = FastaApp()
+    app.mainloop()
+
