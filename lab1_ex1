@@ -1,0 +1,16 @@
+# alphabet.py
+
+def find_alphabet(sequence: str):
+    
+    sequence = sequence.replace(" ", "")
+    return sorted(set(sequence))
+
+def main():
+    S = "*ATTGCCCCGAAT"
+    alphabet = find_alphabet(S)
+
+    print("Sequence:", S)
+    print("Alphabet:", alphabet)   
+
+if __name__ == "__main__":
+    main()
